@@ -14,7 +14,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import IntegrationBlueprintApiClient
+from .api import SeattleUtilities
 
 from .const import (
     CONF_PASSWORD,
@@ -44,7 +44,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
     password = entry.data.get(CONF_PASSWORD)
 
     session = async_get_clientsession(hass)
-    client = IntegrationBlueprintApiClient(username, password, session)
+    client = SeattleUtilities(username, password, session)
 
     coordinator = BlueprintDataUpdateCoordinator(hass, client=client)
     await coordinator.async_refresh()
@@ -80,7 +80,8 @@ class BlueprintDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Update data via library."""
         try:
-            return await self.api.async_get_data()
+            await self.api.get_accounts()
+            return await self.api.get_latest_data("SCL")
         except Exception as exception:
             raise UpdateFailed() from exception
 

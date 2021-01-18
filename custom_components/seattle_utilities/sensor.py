@@ -20,7 +20,7 @@ class IntegrationBlueprintSensor(IntegrationBlueprintEntity):
     @property
     def state(self):
         """Return the state of the sensor."""
-        return self.coordinator.data.get("body")
+        return self.coordinator.data
 
     @property
     def icon(self):
