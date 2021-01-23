@@ -1,14 +1,14 @@
-"""Constants for integration_blueprint."""
+"""Constants for seattle_utilities."""
 # Base component constants
-NAME = "Integration blueprint"
-DOMAIN = "seattle"
+NAME = "Seattle Utilities"
+DOMAIN = "seattle_utilities"
 DOMAIN_DATA = f"{DOMAIN}_data"
 VERSION = "0.0.1"
-ATTRIBUTION = "Data provided by http://jsonplaceholder.typicode.com/"
-ISSUE_URL = "https://github.com/custom-components/integration_blueprint/issues"
+ATTRIBUTION = "Data provided by Seattle Utilities"
+ISSUE_URL = "https://github.com/sebirdman/hass_seattle_utilities/issues"
 
 # Icons
-ICON = "mdi:format-quote-close"
+ICON = "mdi:power-plug"
 
 # Platforms
 SENSOR = "sensor"
@@ -27,7 +27,7 @@ STARTUP_MESSAGE = f"""
 -------------------------------------------------------------------
 {NAME}
 Version: {VERSION}
-This is a custom integration!
+This is a custom integration for Seattle Utilities!
 If you have any issues with this you need to open an issue here:
 {ISSUE_URL}
 -------------------------------------------------------------------

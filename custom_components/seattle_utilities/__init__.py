@@ -1,8 +1,8 @@
 """
-Custom integration to integrate integration_blueprint with Home Assistant.
+Custom integration to integrate Seattle Utilities with Home Assistant.
 
 For more details about this integration, please refer to
-https://github.com/custom-components/integration_blueprint
+https://github.com/sebirdman/hass_seattle_utilities
 """
 import asyncio
 from datetime import timedelta
@@ -24,10 +24,9 @@ from .const import (
     STARTUP_MESSAGE,
 )
 
-SCAN_INTERVAL = timedelta(seconds=30)
+SCAN_INTERVAL = timedelta(hours=12)
 
 _LOGGER: logging.Logger = logging.getLogger(__package__)
-
 
 async def async_setup(hass: HomeAssistant, config: Config):
     """Set up this integration using YAML is not supported."""
@@ -69,7 +68,7 @@ class BlueprintDataUpdateCoordinator(DataUpdateCoordinator):
     """Class to manage fetching data from the API."""
 
     def __init__(
-        self, hass: HomeAssistant, client: IntegrationBlueprintApiClient
+        self, hass: HomeAssistant, client: SeattleUtilities
     ) -> None:
         """Initialize."""
         self.api = client
@@ -80,9 +79,11 @@ class BlueprintDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self):
         """Update data via library."""
         try:
+            await self.api.login()
             await self.api.get_accounts()
             return await self.api.get_latest_data("SCL")
         except Exception as exception:
+            _LOGGER.error("Failed_getting data %s", exception)
             raise UpdateFailed() from exception
 
 

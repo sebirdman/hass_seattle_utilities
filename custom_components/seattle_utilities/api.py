@@ -4,8 +4,13 @@ from urllib.parse import urlencode
 import json
 import base64
 from datetime import datetime, timedelta
+import aiohttp
+import async_timeout
+import asyncio
 
 accept_html = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+TIMEOUT = 10
+
 
 class MyHTMLParser(HTMLParser):
     def __init__(self):
@@ -45,35 +50,42 @@ class SeattleUtilities:
     def __init__(self, username, password, session: aiohttp.ClientSession):
         self.username = username
         self.password = password
-        self.session = session
+        self._session = session
+        self.latest_data = {}
 
     async def __get_oracle_location(self):
-        headers = {"Accept": accept_html, "Host": "myutilities.seattle.gov", }
+        headers = {"Accept": accept_html, "Host": "myutilities.seattle.gov"}
         data = await self.api_wrapper("get", "https://myutilities.seattle.gov/rest/auth/ssologin",
                             headers=headers, allow_redirects=False)
         return data.headers["Location"]
 
     async def __get_oracle_cookie(self, url, cookie=None):
-        headers = {"Accept": accept_html, "Cookie": cookie, }
+        if cookie == None:
+          headers = {"Accept": accept_html}
+        else:
+          headers = {"Accept": accept_html, "Cookie": cookie}
         data = await self.api_wrapper("get", url, headers=headers, allow_redirects=False)
+        text = await data.text()
         if "Location" in data.headers:
             response = {
                 "cookie": data.headers["Set-Cookie"],
                 "url": data.headers["Location"],
-                "html": data.text,
+                "html": text,
             }
         else:
             response = {
                 "cookie": data.headers["Set-Cookie"],
-                "html": data.text,
+                "html": text,
             }
         return response
 
-    async def __submit_form(self, url, formdata, cookie=None,):
-        headers = {"Cookie": cookie}
-        data = await self.api_wrapper("post", url, data=formdata,
+    async def __submit_form(self, url, data, cookie=None):
+        if cookie == None:
+          headers = None
+        else:
+          headers = {"Cookie": cookie}
+        return await self.api_wrapper("post_form", url, data=data,
                              headers=headers, allow_redirects=False)
-        return data
 
     def get_data_from_js(self, data):
         startIDX = data.find("setItem")
@@ -132,31 +144,29 @@ class SeattleUtilities:
             "initialState": jsdata["initialState"]
         }
         headers = {"Content-Type": "application/json"}
-        data = await self.api_wrapper("post", 
+        data = await self.api_wrapper("post",
             "https://login.seattle.gov/authenticate", json=json, headers=headers)
-        return data.json()
+        return await data.json()
 
     async def __start_session(self, baseuri, authnToken, cookie):
         body = {"authnToken": authnToken}
         headers = {"Cookie": cookie}
         url = "{}/sso/v1/sdk/session".format(baseuri)
-        data = await self.api_wrapper("post", 
+        return await self.api_wrapper("post_form",
             url, data=body, headers=headers, allow_redirects=False)
-        return data
 
     async def __submit_form_auth(self, url, formdata):
         message = "webClientIdPassword:secret".encode("utf-8")
         base64_bytes = base64.b64encode(message)
         base64_message = base64_bytes.decode('utf-8')
         headers = {"Authorization": "Basic {}".format(base64_message)}
-        data = await self.api_wrapper("post", url, data=formdata,
+        return await self.api_wrapper("post_form", url, data=formdata,
                              headers=headers, allow_redirects=False)
-        return data
 
     async def login(self):
         url = await self.__get_oracle_location()
         data = await self.__get_oracle_cookie(url)
-        oracle_identity_data = self.__get_oracle_cookie(
+        oracle_identity_data = await self.__get_oracle_cookie(
             data["url"], data["cookie"])
 
         parser = MyHTMLParser()
@@ -166,7 +176,8 @@ class SeattleUtilities:
         url = parser.get_form_url()
 
         data = await self.__submit_form(url, data)
-        jsdata = self.get_data_from_js(data.text)
+        text = await data.text()
+        jsdata = self.get_data_from_js(text)
 
         data = await self.__do_authenticate(jsdata)
 
@@ -175,8 +186,9 @@ class SeattleUtilities:
 
         cookie = data.headers["Set-Cookie"]
 
+        text = await data.text()
         parser = MyHTMLParser()
-        parser.feed(data.text)
+        parser.feed(text)
 
         data = parser.get_form_data()
         url = parser.get_form_url()
@@ -184,8 +196,9 @@ class SeattleUtilities:
         data = await self.__submit_form(url, data, cookie)
         cookie = data.headers["Set-Cookie"]
 
+        text = await data.text()
         parser = MyHTMLParser()
-        parser.feed(data.text)
+        parser.feed(text)
 
         data = parser.get_form_data()
         url = parser.get_form_url()
@@ -199,19 +212,19 @@ class SeattleUtilities:
         }
         response = await self.__submit_form_auth(
             "https://myutilities.seattle.gov/rest/oauth/token", data)
-        self.auth_info = response.json()
+        self.auth_info = await response.json()
 
     async def get_accounts(self):
         payload = {
           "customerId": self.auth_info["user"]["customerId"],
-          "csrId": self.auth_info["user"]["userName"],
+          "csrId": self.auth_info["user"]["userName"]
         }
         headers = {
           "Content-Type": "application/json",
           "Authorization": "Bearer " + self.auth_info["access_token"]
         }
         data = await self.api_wrapper("post", "https://myutilities.seattle.gov/rest/account/list", json=payload, headers=headers, allow_redirects=False)
-        self.accounts = data.json()
+        self.accounts = await data.json()
 
     async def get_account_holders(self, company_code):
       payload = {
@@ -227,7 +240,7 @@ class SeattleUtilities:
         "Authorization": "Bearer " + self.auth_info["access_token"]
       }
       data = await self.api_wrapper("post", "https://myutilities.seattle.gov/rest/account/list/some", json=payload, headers=headers, allow_redirects=False)
-      return data.json()
+      return await data.json()
 
     async def get_bill_list(self, company_code, account):
       payload = {
@@ -248,7 +261,7 @@ class SeattleUtilities:
         "Authorization": "Bearer " + self.auth_info["access_token"]
       }
       data = await self.api_wrapper("post", "https://myutilities.seattle.gov/rest/billing/comparison", json=payload, headers=headers, allow_redirects=False)
-      return data.json()
+      return await data.json()
 
     async def get_daily_data(self, account, service_id, start, end, meter):
       payload = {
@@ -267,7 +280,7 @@ class SeattleUtilities:
         "Authorization": "Bearer " + self.auth_info["access_token"]
       }
       data = await self.api_wrapper("post", "https://myutilities.seattle.gov/rest/usage/month", json=payload, headers=headers, allow_redirects=False)
-      return data.json()
+      return await data.json()
 
     async def get_latest_data(self, who):
       meters = []
@@ -279,7 +292,7 @@ class SeattleUtilities:
           bill_list = await self.get_bill_list(group["name"], account)
           for bill in bill_list["billList"]:
             for meter in bill["meters"]:
-              if meter not in meters: 
+              if meter not in meters:
                 meters.append(meter)
 
 
@@ -292,26 +305,24 @@ class SeattleUtilities:
         meter_data = await self.get_daily_data(account, bill["serviceId"], time_yesterday_string, time_now_string, meter)
         for day in meter_data["history"]:
           if day["chargeDateRaw"] == raw_charge_day:
-            return day["billedConsumption"]
+            self.latest_data[meter] = day["billedConsumption"]
+
+      return self.latest_data
 
     async def api_wrapper(
-        self, method: str, url: str, json: dict = {}, headers: dict = {}
+        self, method: str, url: str, json: dict = {}, data: dict = {}, headers: dict = {}, allow_redirects: bool = True
     ) -> dict:
         """Get information from the API."""
         try:
             async with async_timeout.timeout(TIMEOUT, loop=asyncio.get_event_loop()):
                 if method == "get":
-                    response = await self._session.get(url, headers=headers)
-                    return await response.json()
-
-                elif method == "put":
-                    await self._session.put(url, headers=headers, json=json)
-
-                elif method == "patch":
-                    await self._session.patch(url, headers=headers, json=json)
+                    return await self._session.get(url, headers=headers, allow_redirects=allow_redirects)
 
                 elif method == "post":
-                    await self._session.post(url, headers=headers, json=json)
+                    return await self._session.post(url, headers=headers, json=json, allow_redirects=allow_redirects)
+
+                elif method == "post_form":
+                    return await self._session.post(url, headers=headers, data=data, allow_redirects=allow_redirects)
 
         except asyncio.TimeoutError as exception:
             _LOGGER.error(

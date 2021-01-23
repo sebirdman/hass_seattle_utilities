@@ -12,7 +12,6 @@ from .const import (
     PLATFORMS,
 )
 
-
 class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Config flow for Blueprint."""
 
@@ -66,7 +65,7 @@ class BlueprintFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         try:
             session = async_create_clientsession(self.hass)
             client = SeattleUtilities(username, password, session)
-            await client.get_accounts()
+            await client.login()
             return True
         except Exception:  # pylint: disable=broad-except
             pass
